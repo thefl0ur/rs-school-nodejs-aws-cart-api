@@ -8,12 +8,10 @@ import {
   UseGuards,
   HttpStatus,
   HttpCode,
-  BadRequestException,
 } from '@nestjs/common';
 import { BasicAuthGuard } from '../auth';
 import { Order, OrderService } from '../order';
 import { AppRequest, getUserIdFromRequest } from '../shared';
-import { calculateCartTotal } from './models-rules';
 import { CartService } from './services';
 import { CartItem } from './models';
 import { CreateOrderDto, PutCartPayload } from 'src/order/type';
@@ -63,36 +61,19 @@ export class CartController {
   // @UseGuards(JwtAuthGuard)
   @UseGuards(BasicAuthGuard)
   @Put('order')
-  async checkout(@Req() req: AppRequest, @Body() body: CreateOrderDto) {
+  async checkout(
+    @Req() req: AppRequest,
+    @Body() body: CreateOrderDto,
+  ): Promise<{ order: Order }> {
     const userId = getUserIdFromRequest(req);
-    const cart = await this.cartService.findByUserId(userId);
+    const order = await this.cartService.checkout(userId, body);
 
-    if (!(cart && cart.items.length)) {
-      throw new BadRequestException('Cart is empty');
-    }
-
-    const { id: cartId, items } = cart;
-    const total = calculateCartTotal(items);
-    const order = this.orderService.create({
-      userId,
-      cartId,
-      items: items.map(({ product, count }) => ({
-        productId: product.id,
-        count,
-      })),
-      address: body.address,
-      total,
-    });
-    await this.cartService.removeByUserId(userId);
-
-    return {
-      order,
-    };
+    return { order };
   }
 
   @UseGuards(BasicAuthGuard)
   @Get('order')
-  getOrder(): Order[] {
+  async getOrder(): Promise<Order[]> {
     return this.orderService.getAll();
   }
 }

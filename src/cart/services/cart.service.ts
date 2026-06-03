@@ -1,6 +1,6 @@
-import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { BadRequestException, Injectable } from '@nestjs/common';
+import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+import { DataSource, Repository } from 'typeorm';
 
 import {
   Cart,
@@ -10,7 +10,11 @@ import {
   CartStatus,
   CartStatuses,
 } from '../models';
-import { PutCartPayload } from 'src/order/type';
+import { OrderEntity } from '../../order/models/order.entity';
+import { Order } from '../../order/models';
+import { OrderService } from '../../order/services/order.service';
+import { CreateOrderDto, PutCartPayload } from '../../order/type';
+import { calculateCartTotal } from '../models-rules';
 
 @Injectable()
 export class CartService {
@@ -19,6 +23,9 @@ export class CartService {
     private readonly cartRepository: Repository<CartEntity>,
     @InjectRepository(CartItemEntity)
     private readonly cartItemRepository: Repository<CartItemEntity>,
+    @InjectDataSource()
+    private readonly dataSource: DataSource,
+    private readonly orderService: OrderService,
   ) {}
 
   async findByUserId(userId: string): Promise<Cart | null> {
@@ -84,6 +91,60 @@ export class CartService {
     if (cart) {
       await this.cartRepository.delete({ id: cart.id });
     }
+  }
+
+  async checkout(userId: string, payload: CreateOrderDto): Promise<Order> {
+    return this.dataSource.transaction(async (manager) => {
+      const cart = await manager
+        .getRepository(CartEntity)
+        .createQueryBuilder('c')
+        .setLock('pessimistic_write')
+        .where('c.user_id = :userId AND c.status = :status', {
+          userId,
+          status: CartStatus.OPEN,
+        })
+        .getOne();
+
+      if (!cart) {
+        throw new BadRequestException('Cart is empty');
+      }
+
+      const items = await manager
+        .getRepository(CartItemEntity)
+        .find({ where: { cart_id: cart.id } });
+
+      if (!items.length) {
+        throw new BadRequestException('Cart is empty');
+      }
+
+      const cartForTotal: CartItem[] = items.map((item) => ({
+        product: { id: item.product_id, title: '', description: '', price: 0 },
+        count: item.count,
+      }));
+      const total = calculateCartTotal(cartForTotal);
+
+      const orderEntity = manager.getRepository(OrderEntity).create({
+        user_id: userId,
+        cart_id: cart.id,
+        delivery: payload.address,
+        payment: {},
+        comments: '',
+        status: 'ORDERED',
+        total: String(total),
+      });
+      const savedOrder = await manager
+        .getRepository(OrderEntity)
+        .save(orderEntity);
+
+      await manager
+        .getRepository(CartEntity)
+        .update(cart.id, {
+          status: CartStatus.ORDERED,
+          updated_at: new Date(),
+        });
+
+      return this.orderService.toOrder(savedOrder);
+    });
   }
 
   private async getOpenCartEntity(userId: string): Promise<CartEntity | null> {
