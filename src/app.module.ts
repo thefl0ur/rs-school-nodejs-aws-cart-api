@@ -29,6 +29,9 @@ import { OrderModule } from './order/order.module';
         database: configService.get<string>('DATABASE_NAME'),
         autoLoadEntities: true,
         synchronize: false,
+        ssl: {
+          rejectUnauthorized: false,
+        },
       }),
     }),
   ],
