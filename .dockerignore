@@ -1,0 +1,8 @@
+# ignore everighting except actually needed files and folders
+*
+!package.json
+!package-lock.json
+!src/
+!tsconfig.json
+!tsconfig.build.json
+!nest-cli.json

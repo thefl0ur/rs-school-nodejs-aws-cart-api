@@ -1,0 +1,9 @@
+*
+!Dockerfile
+!docker-compose.yml
+!package.json
+!package-lock.json
+!src/
+!tsconfig.json
+!tsconfig.build.json
+!nest-cli.json
