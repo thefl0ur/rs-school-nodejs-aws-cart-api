@@ -1,3 +1,7 @@
+export * from './cart-status.enum';
+export * from './cart.entity';
+export * from './cart-item.entity';
+
 export enum CartStatuses {
   OPEN = 'OPEN',
   STATUS = 'STATUS',
